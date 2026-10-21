@@ -2,31 +2,71 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\UserRole;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * "role" is intentionally NOT mass assignable, so a registration request
+     * can never promote itself to organizer or admin. Set it explicitly.
      */
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'phone',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'role' => UserRole::class,
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
+    public function isOrganizer(): bool
+    {
+        return $this->role === UserRole::Organizer;
+    }
+
+    public function isAttendee(): bool
+    {
+        return $this->role === UserRole::Attendee;
+    }
+
+    public function venues(): HasMany
+    {
+        return $this->hasMany(Venue::class, 'organizer_id');
+    }
+
+    public function events(): HasMany
+    {
+        return $this->hasMany(Event::class, 'organizer_id');
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }
