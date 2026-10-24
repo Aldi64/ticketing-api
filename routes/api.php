@@ -2,12 +2,45 @@
 
 use App\Http\Controllers\Api\Admin\EventReviewController as AdminEventReviewController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\MidtransWebhookController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\Organizer\EventController as OrganizerEventController;
 use App\Http\Controllers\Api\Organizer\ShowtimeController as OrganizerShowtimeController;
 use App\Http\Controllers\Api\Organizer\VenueController as OrganizerVenueController;
+use App\Http\Controllers\Api\PublicEventController;
+use App\Http\Controllers\Api\SeatHoldController;
+use App\Http\Controllers\Api\SeatMapController;
 use Illuminate\Support\Facades\Route;
 
+/*
+|--------------------------------------------------------------------------
+| Public catalog (no login)
+|--------------------------------------------------------------------------
+*/
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('events', [PublicEventController::class, 'index'])->name('events.index');
+    Route::get('events/{slug}', [PublicEventController::class, 'show'])
+        ->where('slug', '[a-z0-9\-]+')
+        ->name('events.show');
+    Route::get('showtimes/{showtime}/seats', [SeatMapController::class, 'show'])
+        ->whereNumber('showtime')
+        ->name('showtimes.seats');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Midtrans webhook (public, protected by its signature)
+|--------------------------------------------------------------------------
+*/
+Route::post('payments/midtrans/notification', MidtransWebhookController::class)
+    ->name('payments.midtrans.notification');
+
+/*
+|--------------------------------------------------------------------------
+| Auth
+|--------------------------------------------------------------------------
+*/
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');
@@ -18,12 +51,43 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::middleware('auth:sanctum')->prefix('notifications')->name('notifications.')->group(function () {
-    Route::get('/', [NotificationController::class, 'index'])->name('index');
-    Route::post('read-all', [NotificationController::class, 'readAll'])->name('read-all');
-    Route::post('{id}/read', [NotificationController::class, 'read'])->name('read');
+/*
+|--------------------------------------------------------------------------
+| Any logged-in user
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->group(function () {
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::post('read-all', [NotificationController::class, 'readAll'])->name('read-all');
+        Route::post('{id}/read', [NotificationController::class, 'read'])->name('read');
+    });
+
+    Route::post('showtimes/{showtime}/hold', [SeatHoldController::class, 'store'])
+        ->whereNumber('showtime')
+        ->middleware('throttle:20,1')
+        ->name('showtimes.hold.store');
+    Route::delete('showtimes/{showtime}/hold', [SeatHoldController::class, 'destroy'])
+        ->whereNumber('showtime')
+        ->name('showtimes.hold.destroy');
+
+    Route::post('showtimes/{showtime}/orders', [OrderController::class, 'store'])
+        ->whereNumber('showtime')
+        ->middleware('throttle:10,1')
+        ->name('showtimes.orders.store');
+
+    Route::prefix('orders')->name('orders.')->group(function () {
+        Route::get('/', [OrderController::class, 'index'])->name('index');
+        Route::get('{code}', [OrderController::class, 'show'])->where('code', '[A-Za-z0-9]+')->name('show');
+        Route::post('{code}/cancel', [OrderController::class, 'cancel'])->where('code', '[A-Za-z0-9]+')->name('cancel');
+    });
 });
 
+/*
+|--------------------------------------------------------------------------
+| Organizer
+|--------------------------------------------------------------------------
+*/
 Route::prefix('organizer')
     ->name('organizer.')
     ->middleware(['auth:sanctum', 'role:organizer'])
@@ -39,6 +103,11 @@ Route::prefix('organizer')
         Route::post('showtimes/{showtime}/cancel', [OrganizerShowtimeController::class, 'cancel'])->name('showtimes.cancel');
     });
 
+/*
+|--------------------------------------------------------------------------
+| Admin
+|--------------------------------------------------------------------------
+*/
 Route::prefix('admin')
     ->name('admin.')
     ->middleware(['auth:sanctum', 'role:admin'])

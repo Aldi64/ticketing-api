@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('seats:release-expired')->everyMinute();
+Schedule::command('orders:expire')->everyMinute();
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

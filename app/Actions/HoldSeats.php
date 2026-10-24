@@ -28,6 +28,8 @@ class HoldSeats
 
     public const HOLD_MINUTES = 10;
 
+    public function __construct(private readonly ExpireStaleOrders $expireStaleOrders) {}
+
     /**
      * @param  array<int, int|string>  $showtimeSeatIds  showtime_seats ids
      * @return Collection<int, ShowtimeSeat> the held seats, with seat and section loaded
@@ -55,6 +57,10 @@ class HoldSeats
                 'showtime' => 'This showtime is not open for booking.',
             ]);
         }
+
+        // Seats of an unpaid order whose time is up are freed first, so their old order
+        // can't still own them (and block the partial unique index) when we take them.
+        $this->expireStaleOrders->handle($showtime);
 
         $heldUntil = now()->addMinutes(self::HOLD_MINUTES);
 
