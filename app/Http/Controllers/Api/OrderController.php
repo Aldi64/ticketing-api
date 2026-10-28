@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\CreateOrder;
+use App\Actions\ProcessMidtransNotification;
 use App\Actions\ReleaseOrder;
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
@@ -55,6 +56,23 @@ class OrderController extends Controller
         $gateway->cancel($order);
 
         return new OrderResource($this->findMine($request, $code));
+    }
+
+    /**
+     * Pulls the payment status from Midtrans and applies it, exactly like a webhook would.
+     * The frontend calls this after the Snap popup closes, so the page does not depend on
+     * the webhook arriving first. Safe to call repeatedly.
+     */
+    public function sync(Request $request, string $code, MidtransGateway $gateway, ProcessMidtransNotification $process): OrderResource
+    {
+        $order = $this->findMine($request, $code);
+
+        if ($order->isPending() && ($payload = $gateway->fetchStatus($order)) !== null) {
+            $process->handle($payload);
+            $order = $this->findMine($request, $code);
+        }
+
+        return new OrderResource($order);
     }
 
     private function findMine(Request $request, string $code): Order

@@ -79,6 +79,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('orders')->name('orders.')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->name('index');
         Route::get('{code}', [OrderController::class, 'show'])->where('code', '[A-Za-z0-9]+')->name('show');
+        Route::post('{code}/sync', [OrderController::class, 'sync'])->where('code', '[A-Za-z0-9]+')->middleware('throttle:30,1')->name('sync');
         Route::post('{code}/cancel', [OrderController::class, 'cancel'])->where('code', '[A-Za-z0-9]+')->name('cancel');
     });
 });

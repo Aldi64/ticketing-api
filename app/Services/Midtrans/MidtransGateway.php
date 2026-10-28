@@ -91,6 +91,37 @@ class MidtransGateway
     }
 
     /**
+     * Asks Midtrans for the current state of an order's payment. Used when the webhook
+     * has not arrived (local development without a public URL, or a missed retry).
+     * The answer comes straight from Midtrans over our authenticated call, so it needs no signature.
+     *
+     * @return array<string, mixed>|null null when there is nothing to apply yet
+     */
+    public function fetchStatus(Order $order): ?array
+    {
+        try {
+            $payload = Http::withBasicAuth((string) config('midtrans.server_key'), '')
+                ->acceptJson()
+                ->timeout(10)
+                ->get(config('midtrans.api_url')."/{$order->midtrans_order_id}/status")
+                ->json();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        // Midtrans answers 200 with status_code "404" while the buyer has not chosen a payment method.
+        foreach (['order_id', 'gross_amount', 'transaction_id', 'transaction_status'] as $key) {
+            if (! is_array($payload) || ! isset($payload[$key]) || ! is_scalar($payload[$key])) {
+                return null;
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
      * Midtrans signs every notification: SHA512(order_id + status_code + gross_amount + ServerKey).
      * Anyone can POST to our webhook URL, so this check is what makes it trustworthy.
      *
